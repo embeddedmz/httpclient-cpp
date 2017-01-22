@@ -63,7 +63,7 @@ public:
       ProgressFnStruct() : dLastRunTime(0), pCurl(nullptr), pOwner(nullptr) {}
       double dLastRunTime;
       CURL*  pCurl;
-      /* owner of the CFTPClient object. can be used in the body of the progress
+      /* owner of the CHTTPClient object. can be used in the body of the progress
       * function to send signals to the owner (e.g. to update a GUI's progress bar)
       */
       void*  pOwner;

@@ -232,7 +232,7 @@ TEST_F(HTTPTest, TestUploadForm)
    ASSERT_TRUE(static_cast<bool>(ofDummyFile));
    ofDummyFile.close();
 
-   /* Filling information about the form in a Helpers::PostFormInfo object */
+   /* Filling information about the form in a PostFormInfo object */
    CHTTPClient::PostFormInfo UploadInfo;
 
    UploadInfo.AddFormFile("submitted", fileName.str());
@@ -249,7 +249,7 @@ TEST_F(HTTPTest, TestUploadForm)
    remove(fileName.str().c_str());
 }
 
-// Proxy Test with REST GET and File downloading
+// Proxy Test with GET command
 TEST_F(HTTPTest, TestProxy)
 {
    if (HTTP_PROXY_TEST_ENABLED)
