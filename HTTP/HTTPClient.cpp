@@ -146,7 +146,7 @@ const bool CHTTPClient::CleanupSession()
  * @param [in] fnCallback callback to progress function
  *
  */
-void CHTTPClient::SetProgressFnCallback(void* pOwner, const ProgressFnCallback& fnCallback)
+/*inline*/ void CHTTPClient::SetProgressFnCallback(void* pOwner, const ProgressFnCallback& fnCallback)
 {
    m_ProgressStruct.pOwner = pOwner;
    m_fnProgressCallback = fnCallback;
@@ -161,7 +161,7 @@ void CHTTPClient::SetProgressFnCallback(void* pOwner, const ProgressFnCallback& 
  * @param [in] strProxy URI of the HTTP Proxy
  *
  */
-void CHTTPClient::SetProxy(const std::string& strProxy)
+/*inline*/ void CHTTPClient::SetProxy(const std::string& strProxy)
 {
    if (strProxy.empty())
       return;
@@ -549,6 +549,274 @@ void CHTTPClient::PostFormInfo::AddFormContent(const std::string& strFieldName,
       CURLFORM_END);
 }
 
+// REST REQUESTS
+
+/**
+* @brief initializes a REST request
+* some common operations to REST requests are performed here,
+* the others are performed in Perform method
+*
+* @param [in] Headers headers to send
+* @param [out] Response response data
+*/
+inline const bool CHTTPClient::InitRestRequest(const std::string& strUrl,
+                                         const CHTTPClient::HeadersMap& Headers,
+                                         CHTTPClient::HttpResponse& Response)
+{
+   if (strUrl.empty())
+   {
+      if (m_eSettingsFlags & ENABLE_LOG)
+         m_oLog(LOG_ERROR_EMPTY_HOST_MSG);
+
+      return false;
+   }
+   if (!m_pCurlSession)
+   {
+      if (m_eSettingsFlags & ENABLE_LOG)
+         m_oLog(LOG_ERROR_CURL_NOT_INIT_MSG);
+
+      return false;
+   }
+   // Reset is mandatory to avoid bad surprises
+   curl_easy_reset(m_pCurlSession);
+
+   CheckURL(strUrl);
+
+   // set the received body's callback function
+   curl_easy_setopt(m_pCurlSession, CURLOPT_WRITEFUNCTION, &CHTTPClient::RestWriteCallback);
+
+   // set data object to pass to callback function above
+   curl_easy_setopt(m_pCurlSession, CURLOPT_WRITEDATA, &Response);
+
+   // set the response's headers processing callback function
+   curl_easy_setopt(m_pCurlSession, CURLOPT_HEADERFUNCTION, &CHTTPClient::RestHeaderCallback);
+
+   // callback object for server's responses headers
+   curl_easy_setopt(m_pCurlSession, CURLOPT_HEADERDATA, &Response);
+
+   std::string strHeader;
+   for (HeadersMap::const_iterator it = Headers.cbegin();
+      it != Headers.cend();
+      ++it)
+   {
+      strHeader = it->first + ": " + it->second; // build header string
+      AddHeader(strHeader);
+   }
+
+   return true;
+}
+
+/**
+* @brief post REST request operations are performed here
+*
+* @param [in] ePerformCode curl easy perform returned code
+* @param [out] Response response data
+*/
+inline const bool CHTTPClient::PostRestRequest(const CURLcode ePerformCode,
+                                               CHTTPClient::HttpResponse& Response)
+{
+   // Check for errors
+   if (ePerformCode != CURLE_OK)
+   {
+      Response.strBody.clear();
+      Response.iCode = -1;
+
+      if (m_eSettingsFlags & ENABLE_LOG)
+         m_oLog(StringFormat(LOG_ERROR_CURL_REST_FAILURE_FORMAT, m_strURL.c_str(), ePerformCode,
+            curl_easy_strerror(ePerformCode)));
+
+      return false;
+   }
+   long lHttpCode = 0;
+   curl_easy_getinfo(m_pCurlSession, CURLINFO_RESPONSE_CODE, &lHttpCode);
+   Response.iCode = static_cast<int>(lHttpCode);
+
+   return true;
+}
+
+/**
+* @brief performs a HEAD request
+*
+* @param [in] strUrl url to request
+* @param [in] Headers headers to send
+* @param [out] Response response data
+*
+* @retval true   Successfully requested the URI.
+* @retval false  Encountered a problem.
+*/
+const bool CHTTPClient::Head(const std::string& strUrl,
+   const CHTTPClient::HeadersMap& Headers,
+   CHTTPClient::HttpResponse& Response)
+{
+   if (InitRestRequest(strUrl, Headers, Response))
+   {
+      /** set HTTP HEAD METHOD */
+      curl_easy_setopt(m_pCurlSession, CURLOPT_CUSTOMREQUEST, "HEAD");
+      curl_easy_setopt(m_pCurlSession, CURLOPT_NOBODY, 1L);
+
+      CURLcode res = Perform();
+
+      return PostRestRequest(res, Response);
+   }
+   else
+      return false;
+}
+
+/**
+* @brief performs a GET request
+*
+* @param [in] strUrl url to request
+* @param [in] Headers headers to send
+* @param [out] Response response data
+*
+* @retval true   Successfully requested the URI.
+* @retval false  Encountered a problem.
+*/
+const bool CHTTPClient::Get(const std::string& strUrl,
+   const CHTTPClient::HeadersMap& Headers,
+   CHTTPClient::HttpResponse& Response)
+{
+   if (InitRestRequest(strUrl, Headers, Response))
+   {
+      // specify a GET request
+      curl_easy_setopt(m_pCurlSession, CURLOPT_HTTPGET, 1L);
+
+      CURLcode res = Perform();
+
+      return PostRestRequest(res, Response);
+   }
+   else
+      return false;
+}
+
+/**
+* @brief performs a DELETE request
+*
+* @param [in] strUrl url to request
+* @param [in] Headers headers to send
+* @param [out] Response response data
+*
+* @retval true   Successfully requested the URI.
+* @retval false  Encountered a problem.
+*/
+const bool CHTTPClient::Del(const std::string& strUrl,
+   const CHTTPClient::HeadersMap& Headers,
+   CHTTPClient::HttpResponse& Response)
+{
+   if (InitRestRequest(strUrl, Headers, Response))
+   {
+      curl_easy_setopt(m_pCurlSession, CURLOPT_CUSTOMREQUEST, "DELETE");
+
+      CURLcode res = Perform();
+
+      return PostRestRequest(res, Response);
+   }
+   else
+      return false;
+}
+
+const bool CHTTPClient::Post(const std::string& strUrl,
+   const CHTTPClient::HeadersMap& Headers,
+   const std::string& strPostData,
+   CHTTPClient::HttpResponse& Response)
+{
+   if (InitRestRequest(strUrl, Headers, Response))
+   {
+      // specify a POST request
+      curl_easy_setopt(m_pCurlSession, CURLOPT_POST, 1L);
+
+      // set post informations
+      curl_easy_setopt(m_pCurlSession, CURLOPT_POSTFIELDS, strPostData.c_str());
+      curl_easy_setopt(m_pCurlSession, CURLOPT_POSTFIELDSIZE, strPostData.size());
+
+      CURLcode res = Perform();
+
+      return PostRestRequest(res, Response);
+   }
+   else
+      return false;
+}
+
+/**
+* @brief performs a PUT request with a string
+*
+* @param [in] strUrl url to request
+* @param [in] Headers headers to send
+* @param [out] Response response data
+*
+* @retval true   Successfully requested the URI.
+* @retval false  Encountered a problem.
+*/
+const bool CHTTPClient::Put(const std::string& strUrl, const CHTTPClient::HeadersMap& Headers,
+   const std::string& strPutData, CHTTPClient::HttpResponse& Response)
+{
+   if (InitRestRequest(strUrl, Headers, Response))
+   {
+      CHTTPClient::UploadObject Payload;
+
+      Payload.pszData = strPutData.c_str();
+      Payload.usLength = strPutData.size();
+
+      // specify a PUT request
+      curl_easy_setopt(m_pCurlSession, CURLOPT_PUT, 1L);
+      curl_easy_setopt(m_pCurlSession, CURLOPT_UPLOAD, 1L);
+
+      // set read callback function
+      curl_easy_setopt(m_pCurlSession, CURLOPT_READFUNCTION, &CHTTPClient::RestReadCallback);
+      // set data object to pass to callback function
+      curl_easy_setopt(m_pCurlSession, CURLOPT_READDATA, &Payload);
+
+      // set data size
+      curl_easy_setopt(m_pCurlSession, CURLOPT_INFILESIZE, static_cast<long>(Payload.usLength));
+
+      CURLcode res = Perform();
+
+      return PostRestRequest(res, Response);
+   }
+   else
+      return false;
+}
+
+/**
+* @brief performs a PUT request with a byte buffer (vector of char)
+*
+* @param [in] strUrl url to request
+* @param [in] Headers headers to send
+* @param [out] Response response data
+*
+* @retval true   Successfully requested the URI.
+* @retval false  Encountered a problem.
+*/
+const bool CHTTPClient::Put(const std::string& strUrl, const CHTTPClient::HeadersMap& Headers,
+   const CHTTPClient::ByteBuffer& Data, CHTTPClient::HttpResponse& Response)
+{
+   if (InitRestRequest(strUrl, Headers, Response))
+   {
+      CHTTPClient::UploadObject Payload;
+
+      Payload.pszData = Data.data();
+      Payload.usLength = Data.size();
+
+      // specify a PUT request
+      curl_easy_setopt(m_pCurlSession, CURLOPT_PUT, 1L);
+      curl_easy_setopt(m_pCurlSession, CURLOPT_UPLOAD, 1L);
+
+      // set read callback function
+      curl_easy_setopt(m_pCurlSession, CURLOPT_READFUNCTION, &CHTTPClient::RestReadCallback);
+      // set data object to pass to callback function
+      curl_easy_setopt(m_pCurlSession, CURLOPT_READDATA, &Payload);
+
+      // set data size
+      curl_easy_setopt(m_pCurlSession, CURLOPT_INFILESIZE, static_cast<long>(Payload.usLength));
+
+      CURLcode res = Perform();
+
+      return PostRestRequest(res, Response);
+   }
+   else
+      return false;
+}
+
 // STRING HELPERS
 
 /**
@@ -598,6 +866,24 @@ std::string CHTTPClient::StringFormat(const std::string strFormat, ...)
    return std::string(buffer);
 }
 */
+
+/**
+* @brief removes leading and trailing whitespace from a string
+*
+* @param [in/out] str string to be trimmed
+*/
+inline void CHTTPClient::TrimSpaces(std::string& str)
+{
+   // trim from left
+   str.erase(str.begin(),
+      std::find_if(str.begin(), str.end(), [](char c) {return !isspace(c); })
+   );
+
+   // trim from right
+   str.erase(std::find_if(str.rbegin(), str.rend(), [](char c) {return !isspace(c); }).base(),
+      str.end()
+   );
+}
 
 // CURL CALLBACKS
 
@@ -677,6 +963,105 @@ size_t CHTTPClient::ReadFromFileCallback(void* ptr, size_t size, size_t nmemb, v
       return pFileStream->gcount();
    }
    return 0;
+}
+
+// REST CALLBACKS
+
+/**
+* @brief write callback function for libcurl
+* this callback will be called to store the server's Body reponse
+* in a struct response
+*
+* we can also use an std::vector<char> instead of an std::string but in this case
+* there isn't a big difference... maybe resizing the container with a max size can
+* enhance performances...
+*
+* @param data returned data of size (size*nmemb)
+* @param size size parameter
+* @param nmemb memblock parameter
+* @param userdata pointer to user data to save/work with return data
+*
+* @return (size * nmemb)
+*/
+size_t CHTTPClient::RestWriteCallback(void* pCurlData, size_t usBlockCount, size_t usBlockSize, void* pUserData)
+{
+   CHTTPClient::HttpResponse* pServerResponse;
+   pServerResponse = reinterpret_cast<CHTTPClient::HttpResponse*>(pUserData);
+   pServerResponse->strBody.append(reinterpret_cast<char*>(pCurlData), usBlockCount * usBlockSize);
+
+   return (usBlockCount * usBlockSize);
+}
+
+/**
+* @brief header callback for libcurl
+* callback used to process response's headers (received)
+*
+* @param data returned (header line)
+* @param size of data
+* @param nmemb memblock
+* @param userdata pointer to user data object to save header data
+* @return size * nmemb;
+*/
+size_t CHTTPClient::RestHeaderCallback(void* pCurlData, size_t usBlockCount, size_t usBlockSize, void* pUserData)
+{
+   CHTTPClient::HttpResponse* pServerResponse;
+   pServerResponse = reinterpret_cast<CHTTPClient::HttpResponse*>(pUserData);
+
+   std::string strHeader(reinterpret_cast<char*>(pCurlData), usBlockCount * usBlockSize);
+   size_t usSeperator = strHeader.find_first_of(":");
+   if (std::string::npos == usSeperator)
+   {
+      //roll with non seperated headers or response's line
+      TrimSpaces(strHeader);
+      if (0 == strHeader.length())
+      {
+         return (usBlockCount * usBlockSize); //blank line;
+      }
+      pServerResponse->mapHeaders[strHeader] = "present";
+   }
+   else
+   {
+      std::string strKey = strHeader.substr(0, usSeperator);
+      TrimSpaces(strKey);
+      std::string strValue = strHeader.substr(usSeperator + 1);
+      TrimSpaces(strValue);
+      pServerResponse->mapHeaders[strKey] = strValue;
+   }
+
+   return (usBlockCount * usBlockSize);
+}
+
+/**
+* @brief read callback function for libcurl
+* used to send (or upload) a content to the server
+*
+* @param pointer of max size (size*nmemb) to write data to (used by cURL to send data)
+* @param size size parameter
+* @param nmemb memblock parameter
+* @param userdata pointer to user data to read data from
+*
+* @return (size * nmemb)
+*/
+size_t CHTTPClient::RestReadCallback(void* pCurlData, size_t usBlockCount, size_t usBlockSize, void* pUserData)
+{
+   // get upload struct
+   CHTTPClient::UploadObject* Payload;
+
+   Payload = reinterpret_cast<CHTTPClient::UploadObject*>(pUserData);
+
+   // set correct sizes
+   size_t usCurlSize = usBlockCount * usBlockSize;
+   size_t usCopySize = (Payload->usLength < usCurlSize) ? Payload->usLength : usCurlSize;
+
+   /** copy data to buffer */
+   std::memcpy(pCurlData, Payload->pszData, usCopySize);
+
+   // decrement length and increment data pointer
+   Payload->usLength -= usCopySize; // remaining bytes to be sent
+   Payload->pszData += usCopySize;  // next byte to the chunk that will be sent
+
+                                    /** return copied size */
+   return usCopySize;
 }
 
 // CURL DEBUG INFO CALLBACKS

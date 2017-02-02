@@ -22,6 +22,7 @@ include_directories(${CURL_INCLUDE_DIRS})
 
 include_directories(../HTTP)
 include_directories(./simpleini)
+include_directories(./rapidjson)
 include_directories(./)
 
 

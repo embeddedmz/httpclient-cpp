@@ -59,6 +59,43 @@ protected:
    }
 };
 
+// Fixture for HTTP tests (inspired from restclient-cpp project)
+class RestClientTest : public ::testing::Test
+{
+protected:
+   std::unique_ptr<CHTTPClient> m_pRESTClient;
+   CHTTPClient::HeadersMap m_mapHeader;
+   CHTTPClient::HttpResponse m_Response;
+
+   RestClientTest() : m_pRESTClient(nullptr)
+   {
+      m_mapHeader.emplace("User-Agent", CLIENT_USERAGENT);
+
+      CHTTPClient::SetCertificateFile(CERT_AUTH_FILE);
+
+#ifdef DEBUG_CURL
+      CHTTPClient::SetCurlTraceLogDirectory(CURL_LOG_FOLDER);
+#endif
+   }
+
+   virtual ~RestClientTest() { }
+
+   virtual void SetUp()
+   {
+      m_pRESTClient.reset(new CHTTPClient(PRINT_LOG));
+
+      /* to enable HTTPS, use the proper scheme in the URI
+      * or use SetHTTPS(true) */
+      m_pRESTClient->InitSession();
+   }
+
+   virtual void TearDown()
+   {
+      m_pRESTClient->CleanupSession();
+      m_pRESTClient.reset();
+   }
+};
+
    // Unit tests
 
 // Tests without a fixture (testing setters/getters and init./cleanup session)
@@ -108,9 +145,9 @@ TEST(HTTPClient, TestSession)
    EXPECT_STREQ("passphrase", HTTPClient.GetSSLKeyPwd().c_str());
    EXPECT_EQ(10, HTTPClient.GetTimeout());
 
-   HTTPClient.SetProgressFnCallback(reinterpret_cast<void*>(0xFFFFFFFF), &TestProgressCallback);
+   HTTPClient.SetProgressFnCallback(reinterpret_cast<void*>(0xFFFF), &TestProgressCallback);
    EXPECT_EQ(&TestProgressCallback, *HTTPClient.GetProgressFnCallback());
-   EXPECT_EQ(reinterpret_cast<void*>(0xFFFFFFFF), HTTPClient.GetProgressFnCallbackOwner());
+   EXPECT_EQ(reinterpret_cast<void*>(0xFFFF), HTTPClient.GetProgressFnCallbackOwner());
 
    EXPECT_TRUE(HTTPClient.CleanupSession());
 }
@@ -286,6 +323,258 @@ TEST_F(HTTPTest, TestInexistantProxy)
    }
    else
       std::cout << "HTTP Proxy tests are disabled !" << std::endl;
+}
+
+/* REST tests */
+
+// HEAD Tests
+// check return code
+TEST_F(RestClientTest, TestRestClientHeadCode)
+{
+   EXPECT_TRUE(m_pRESTClient->Head("http://httpbin.org/get", m_mapHeader, m_Response));
+   EXPECT_EQ(200, m_Response.iCode);
+   EXPECT_TRUE(m_Response.strBody.empty());
+   EXPECT_FALSE(m_Response.mapHeaders.empty());
+}
+
+// GET Tests
+TEST_F(RestClientTest, TestRestClientGETCode)
+{
+   EXPECT_TRUE(m_pRESTClient->Get("http://httpbin.org/get", m_mapHeader, m_Response));
+   EXPECT_EQ(200, m_Response.iCode);
+}
+TEST_F(RestClientTest, TestRestClientGETBodyCode)
+{
+   ASSERT_TRUE(m_pRESTClient->Get("http://httpbin.org/get", m_mapHeader, m_Response));
+
+   rapidjson::Document document;
+   std::vector<char> Resp(m_Response.strBody.c_str(),
+      m_Response.strBody.c_str() + m_Response.strBody.size() + 1);
+   ASSERT_FALSE(document.ParseInsitu(&Resp[0]).HasParseError());
+
+   rapidjson::Value::MemberIterator itTokenUrl = document.FindMember("url");
+   ASSERT_TRUE(itTokenUrl != document.MemberEnd());
+   ASSERT_TRUE(itTokenUrl->value.IsString());
+   EXPECT_STREQ("http://httpbin.org/get", itTokenUrl->value.GetString());
+
+   rapidjson::Value::MemberIterator itTokenHeaders = document.FindMember("headers");
+   ASSERT_TRUE(itTokenHeaders != document.MemberEnd());
+   ASSERT_TRUE(itTokenHeaders->value.IsObject());
+   rapidjson::Value::MemberIterator itTokenAgent = itTokenHeaders->value.FindMember("User-Agent");
+   ASSERT_TRUE(itTokenAgent != itTokenHeaders->value.MemberEnd());
+   EXPECT_STREQ(CLIENT_USERAGENT, itTokenAgent->value.GetString());
+}
+
+// check for failure
+TEST_F(RestClientTest, TestRestClientGETFailureCode)
+{
+   std::string strInvalidUrl = "http://nonexistent";
+
+   EXPECT_FALSE(m_pRESTClient->Get(strInvalidUrl, m_mapHeader, m_Response));
+   EXPECT_TRUE(m_Response.strBody.empty());
+   EXPECT_EQ(-1, m_Response.iCode);
+}
+
+TEST_F(RestClientTest, TestRestClientGETHeaders)
+{
+   ASSERT_TRUE(m_pRESTClient->Get("http://httpbin.org/get", m_mapHeader, m_Response));
+   ASSERT_TRUE(m_Response.mapHeaders.find("Connection") != m_Response.mapHeaders.end());
+   EXPECT_EQ("keep-alive", m_Response.mapHeaders["Connection"]);
+}
+
+TEST_F(RestClientTest, TestRestClientAuth)
+{
+   ASSERT_TRUE(m_pRESTClient->Get("http://foo:bar@httpbin.org/basic-auth/foo/bar", m_mapHeader, m_Response));
+   ASSERT_EQ(200, m_Response.iCode);
+
+   rapidjson::Document document;
+   std::vector<char> Resp(m_Response.strBody.c_str(),
+      m_Response.strBody.c_str() + m_Response.strBody.size() + 1);
+   ASSERT_FALSE(document.ParseInsitu(&Resp[0]).HasParseError());
+
+   rapidjson::Value::MemberIterator itTokenUser = document.FindMember("user");
+   ASSERT_TRUE(itTokenUser != document.MemberEnd());
+   ASSERT_TRUE(itTokenUser->value.IsString());
+   EXPECT_STREQ("foo", itTokenUser->value.GetString());
+
+   rapidjson::Value::MemberIterator itTokenAuth = document.FindMember("authenticated");
+   ASSERT_TRUE(itTokenAuth != document.MemberEnd());
+   ASSERT_TRUE(itTokenAuth->value.IsBool());
+   EXPECT_EQ(true, itTokenAuth->value.GetBool());
+
+   ASSERT_TRUE(m_pRESTClient->Get("http://httpbin.org/basic-auth/foo/bar", m_mapHeader, m_Response));
+   ASSERT_EQ(401, m_Response.iCode);
+}
+
+// POST Tests
+// check return code
+TEST_F(RestClientTest, TestRestClientPOSTCode)
+{
+   std::string strPostData = "data";
+   m_mapHeader.emplace("Content-Type", "text/text");
+
+   EXPECT_TRUE(m_pRESTClient->Post("http://httpbin.org/post", m_mapHeader, strPostData, m_Response));
+   EXPECT_EQ(200, m_Response.iCode);
+}
+TEST_F(RestClientTest, TestRestClientPOSTBody)
+{
+   m_mapHeader.emplace("Content-Type", "text/text");
+
+   ASSERT_TRUE(m_pRESTClient->Post("http://httpbin.org/post", m_mapHeader, "data", m_Response));
+
+   rapidjson::Document document;
+   std::vector<char> Resp(m_Response.strBody.c_str(),
+      m_Response.strBody.c_str() + m_Response.strBody.size() + 1);
+   ASSERT_FALSE(document.ParseInsitu(&Resp[0]).HasParseError());
+
+   rapidjson::Value::MemberIterator itTokenUrl = document.FindMember("url");
+   ASSERT_TRUE(itTokenUrl != document.MemberEnd());
+   ASSERT_TRUE(itTokenUrl->value.IsString());
+   EXPECT_STREQ("http://httpbin.org/post", itTokenUrl->value.GetString());
+
+   rapidjson::Value::MemberIterator itTokenHeaders = document.FindMember("headers");
+   ASSERT_TRUE(itTokenHeaders != document.MemberEnd());
+   ASSERT_TRUE(itTokenHeaders->value.IsObject());
+   rapidjson::Value::MemberIterator itTokenAgent = itTokenHeaders->value.FindMember("User-Agent");
+   ASSERT_TRUE(itTokenAgent != itTokenHeaders->value.MemberEnd());
+   EXPECT_STREQ(CLIENT_USERAGENT, itTokenAgent->value.GetString());
+}
+// check for failure
+TEST_F(RestClientTest, TestRestClientPOSTFailureCode)
+{
+   std::string strInvalidUrl = "http://nonexistent";
+   m_mapHeader.emplace("Content-Type", "text/text");
+
+   EXPECT_FALSE(m_pRESTClient->Post(strInvalidUrl, m_mapHeader, "data", m_Response));
+   EXPECT_EQ(-1, m_Response.iCode);
+}
+TEST_F(RestClientTest, TestRestClientPOSTHeaders)
+{
+   m_mapHeader.emplace("Content-Type", "text/text");
+
+   ASSERT_TRUE(m_pRESTClient->Post("http://httpbin.org/post", m_mapHeader, "data", m_Response));
+   ASSERT_TRUE(m_Response.mapHeaders.find("Connection") != m_Response.mapHeaders.end());
+   EXPECT_EQ("keep-alive", m_Response.mapHeaders["Connection"]);
+}
+
+// PUT Tests
+// check return code
+TEST_F(RestClientTest, TestRestClientPUTString)
+{
+   std::string strPutData = "data";
+   m_mapHeader.emplace("Content-Type", "text/text");
+
+   EXPECT_TRUE(m_pRESTClient->Put("http://httpbin.org/put", m_mapHeader, strPutData, m_Response));
+   EXPECT_EQ(200, m_Response.iCode);
+
+   rapidjson::Document document;
+   std::vector<char> Resp(m_Response.strBody.c_str(),
+      m_Response.strBody.c_str() + m_Response.strBody.size() + 1);
+   ASSERT_FALSE(document.ParseInsitu(&Resp[0]).HasParseError());
+
+   rapidjson::Value::MemberIterator itTokenUrl = document.FindMember("url");
+   ASSERT_TRUE(itTokenUrl != document.MemberEnd());
+   ASSERT_TRUE(itTokenUrl->value.IsString());
+   EXPECT_STREQ("http://httpbin.org/put", itTokenUrl->value.GetString());
+
+   rapidjson::Value::MemberIterator itTokenHeaders = document.FindMember("headers");
+   ASSERT_TRUE(itTokenHeaders != document.MemberEnd());
+   ASSERT_TRUE(itTokenHeaders->value.IsObject());
+   rapidjson::Value::MemberIterator itTokenAgent = itTokenHeaders->value.FindMember("User-Agent");
+   ASSERT_TRUE(itTokenAgent != itTokenHeaders->value.MemberEnd());
+   EXPECT_STREQ(CLIENT_USERAGENT, itTokenAgent->value.GetString());
+}
+
+TEST_F(RestClientTest, TestRestClientPUTBuffer)
+{
+   CHTTPClient::ByteBuffer vecBuffer; // std::vector<char>
+   vecBuffer.reserve(4);
+   vecBuffer.push_back('d');
+   vecBuffer.push_back('a');
+   vecBuffer.push_back('t');
+   vecBuffer.push_back('a');
+
+   m_mapHeader.emplace("Content-Type", "text/text");
+   
+   ASSERT_TRUE(m_pRESTClient->Put("http://httpbin.org/put", m_mapHeader, vecBuffer, m_Response));
+   ASSERT_EQ(200, m_Response.iCode);
+
+   rapidjson::Document document;
+   std::vector<char> Resp(m_Response.strBody.c_str(),
+      m_Response.strBody.c_str() + m_Response.strBody.size() + 1);
+   ASSERT_FALSE(document.ParseInsitu(&Resp[0]).HasParseError());
+
+   rapidjson::Value::MemberIterator itTokenUrl = document.FindMember("url");
+   ASSERT_TRUE(itTokenUrl != document.MemberEnd());
+   ASSERT_TRUE(itTokenUrl->value.IsString());
+   EXPECT_STREQ("http://httpbin.org/put", itTokenUrl->value.GetString());
+
+   rapidjson::Value::MemberIterator itTokenHeaders = document.FindMember("headers");
+   ASSERT_TRUE(itTokenHeaders != document.MemberEnd());
+   ASSERT_TRUE(itTokenHeaders->value.IsObject());
+   rapidjson::Value::MemberIterator itTokenAgent = itTokenHeaders->value.FindMember("User-Agent");
+   ASSERT_TRUE(itTokenAgent != itTokenHeaders->value.MemberEnd());
+   EXPECT_STREQ(CLIENT_USERAGENT, itTokenAgent->value.GetString());
+}
+
+// check for failure
+TEST_F(RestClientTest, TestRestClientPUTFailureCode)
+{
+   std::string strInvalidUrl = "http://nonexistent";
+   m_mapHeader.emplace("Content-Type", "text/text");
+
+   EXPECT_FALSE(m_pRESTClient->Put(strInvalidUrl, m_mapHeader, "data", m_Response));
+   EXPECT_EQ(-1, m_Response.iCode);
+}
+TEST_F(RestClientTest, TestRestClientPUTHeaders)
+{
+   m_mapHeader.emplace("Content-Type", "text/text");
+
+   ASSERT_TRUE(m_pRESTClient->Put("http://httpbin.org/put", m_mapHeader, "data", m_Response));
+   ASSERT_TRUE(m_Response.mapHeaders.find("Connection") != m_Response.mapHeaders.end());
+   EXPECT_EQ("keep-alive", m_Response.mapHeaders["Connection"]);
+}
+
+// DELETE Tests
+// check return code
+TEST_F(RestClientTest, TestRestClientDeleteCode)
+{
+   EXPECT_TRUE(m_pRESTClient->Del("http://httpbin.org/delete", m_mapHeader, m_Response));
+   EXPECT_EQ(200, m_Response.iCode);
+}
+TEST_F(RestClientTest, TestRestClientDeleteBody)
+{
+   ASSERT_TRUE(m_pRESTClient->Del("http://httpbin.org/delete", m_mapHeader, m_Response));
+
+   rapidjson::Document document;
+   std::vector<char> Resp(m_Response.strBody.c_str(),
+      m_Response.strBody.c_str() + m_Response.strBody.size() + 1);
+   ASSERT_FALSE(document.ParseInsitu(&Resp[0]).HasParseError());
+
+   rapidjson::Value::MemberIterator itTokenUrl = document.FindMember("url");
+   ASSERT_TRUE(itTokenUrl != document.MemberEnd());
+   ASSERT_TRUE(itTokenUrl->value.IsString());
+   EXPECT_STREQ("http://httpbin.org/delete", itTokenUrl->value.GetString());
+
+   rapidjson::Value::MemberIterator itTokenHeaders = document.FindMember("headers");
+   ASSERT_TRUE(itTokenHeaders != document.MemberEnd());
+   ASSERT_TRUE(itTokenHeaders->value.IsObject());
+   rapidjson::Value::MemberIterator itTokenAgent = itTokenHeaders->value.FindMember("User-Agent");
+   ASSERT_TRUE(itTokenAgent != itTokenHeaders->value.MemberEnd());
+   EXPECT_STREQ(CLIENT_USERAGENT, itTokenAgent->value.GetString());
+}
+
+// check for failure
+TEST_F(RestClientTest, TestRestClientDeleteFailureCode)
+{
+   EXPECT_FALSE(m_pRESTClient->Del("http://nonexistent", m_mapHeader, m_Response));
+   EXPECT_EQ(-1, m_Response.iCode);
+}
+TEST_F(RestClientTest, TestRestClientDeleteHeaders)
+{
+   ASSERT_TRUE(m_pRESTClient->Del("http://httpbin.org/delete", m_mapHeader, m_Response));
+   ASSERT_TRUE(m_Response.mapHeaders.find("Connection") != m_Response.mapHeaders.end());
+   EXPECT_STREQ("keep-alive", m_Response.mapHeaders["Connection"].c_str());
 }
 
 } // namespace

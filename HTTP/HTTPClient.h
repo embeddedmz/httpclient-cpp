@@ -40,6 +40,8 @@ public:
    // Public definitions
    typedef std::function<int(void*, double, double, double, double)> ProgressFnCallback;
    typedef std::function<void(const std::string&)>                   LogFnCallback;
+   typedef std::unordered_map<std::string, std::string>              HeadersMap;
+   typedef std::vector<char> ByteBuffer;
 
    /* This struct represents the form information to send on POST Form requests */
    struct PostFormInfo
@@ -69,6 +71,15 @@ public:
       void*  pOwner;
    };
 
+   // HTTP response data
+   struct HttpResponse
+   {
+      HttpResponse() : iCode(0) {}
+      int iCode; // HTTP response code
+      HeadersMap mapHeaders; // HTTP response headers fields
+      std::string strBody; // HTTP response body
+   };
+
    enum SettingsFlag
    {
       NO_FLAGS = 0x00,
@@ -88,9 +99,8 @@ public:
    CHTTPClient& operator=(const CHTTPClient& Copy) = delete;
 
    // Setters - Getters (for unit tests)
-   // don't inline SetProgressFnCallback and SetProxy to prevent link errors under VS 2015
-   void SetProgressFnCallback(void* pOwner, const ProgressFnCallback& fnCallback);
-   void SetProxy(const std::string& strProxy);
+   /*inline*/ void SetProgressFnCallback(void* pOwner, const ProgressFnCallback& fnCallback);
+   /*inline*/ void SetProxy(const std::string& strProxy);
    inline void SetTimeout(const int& iTimeout) { m_iCurlTimeout = iTimeout; }
    inline void SetNoSignal(const bool& bNoSignal) { m_bNoSignal = bNoSignal; }
    inline void SetHTTPS(const bool& bEnableHTTPS) { m_bHTTPS = bEnableHTTPS; }
@@ -130,6 +140,17 @@ public:
    {
       m_pHeaderlist = curl_slist_append(m_pHeaderlist, strHeader.c_str());
    }
+
+   // REST requests
+   const bool Head(const std::string& strUrl, const HeadersMap& Headers, HttpResponse& Response);
+   const bool Get(const std::string& strUrl, const HeadersMap& Headers, HttpResponse& Response);
+   const bool Del(const std::string& strUrl, const HeadersMap& Headers, HttpResponse& Response);
+   const bool Post(const std::string& strUrl, const HeadersMap& Headers,
+             const std::string& strPostData, HttpResponse& Response);
+   const bool Put(const std::string& strUrl, const HeadersMap& Headers,
+            const std::string& strPutData, HttpResponse& Response);
+   const bool Put(const std::string& strUrl, const HeadersMap& Headers,
+            const ByteBuffer& Data, HttpResponse& Response);
    
    // SSL certs
    static const std::string& GetCertificateFile() { return s_strCertificationAuthorityFile; }
@@ -149,18 +170,33 @@ public:
 #endif
 
 protected:
+   // payload to upload on POST requests.
+   struct UploadObject
+   {
+      UploadObject() : pszData(nullptr), usLength(0) {}
+      const char* pszData; // data to upload
+      size_t usLength; // length of the data to upload
+   };
+
    /* common operations are performed here */
    inline const CURLcode Perform();
    inline void CheckURL(const std::string& strURL);
+   inline const bool InitRestRequest(const std::string& strUrl, const HeadersMap& Headers,
+                               HttpResponse& Response);
+   inline const bool PostRestRequest(const CURLcode ePerformCode, HttpResponse& Response);
 
    // Curl callbacks
    static size_t WriteInStringCallback(void* ptr, size_t size, size_t nmemb, void* data);
    static size_t WriteToFileCallback(void* ptr, size_t size, size_t nmemb, void* data);
    static size_t ReadFromFileCallback(void* ptr, size_t size, size_t nmemb, void* stream);
    static size_t ThrowAwayCallback(void* ptr, size_t size, size_t nmemb, void* data);
+   static size_t RestWriteCallback(void* ptr, size_t size, size_t nmemb, void* userdata);
+   static size_t RestHeaderCallback(void* ptr, size_t size, size_t nmemb, void* userdata);
+   static size_t RestReadCallback(void* ptr, size_t size, size_t nmemb, void* userdata);
    
    // String Helpers
    static std::string StringFormat(const std::string strFormat, ...);
+   static inline void TrimSpaces(std::string& str);
 
    // Curl Debug informations
 #ifdef DEBUG_CURL
@@ -215,9 +251,11 @@ private:
 
 
 #define LOG_ERROR_CURL_REQ_FAILURE_FORMAT       "[HTTPClient][Error] Unable to perform request from '%s' " \
-                                                "(Error = %d | %s)! (HTTP_Status = %ld)"
+                                                "(Error = %d | %s) (HTTP_Status = %ld)"
+#define LOG_ERROR_CURL_REST_FAILURE_FORMAT      "[HTTPClient][Error] Unable to perform a REST request from '%s' " \
+                                                "(Error = %d | %s)"
 #define LOG_ERROR_CURL_DOWNLOAD_FAILURE_FORMAT  "[HTTPClient][Error] Unable to perform a request - '%s' from '%s' " \
-                                                "(Error = %d | %s)! (HTTP_Status = %ld)"
+                                                "(Error = %d | %s) (HTTP_Status = %ld)"
 #define LOG_ERROR_DOWNLOAD_FILE_FORMAT          "[HTTPClient][Error] Unable to open local file %s"
 
 #endif

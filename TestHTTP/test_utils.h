@@ -29,6 +29,12 @@
 #endif
 
 #include "SimpleIni.h"
+// rapidjson
+#include "stringbuffer.h"
+#include "writer.h"
+#include "document.h"     // rapidjson's DOM-style API
+#include "prettywriter.h" // for stringify JSON
+// SUT
 #include "HTTPClient.h"
 
 //namespace TestHelpers

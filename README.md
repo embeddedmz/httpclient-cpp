@@ -64,8 +64,18 @@ long lResultHTTPCode = 0;
 /* Filling information about the form in a PostFormInfo object */
 CHTTPClient::PostFormInfo UploadInfo;
 
-UploadInfo.AddFormFile("submitted", fileName.str());
-UploadInfo.AddFormContent("filename", fileName.str());
+/* "submitted" is the name of the "file" input and "myfile.txt" is the location
+of the file to submit.
+<input type="file" name="submitted">
+*/
+UploadInfo.AddFormFile("submitted", "myfile.txt");
+
+/* In some rare cases, some fields related to the form can be filled with
+AddFormContent(), the 1st argument is the name of the input element and
+the 2nd argument is the value assigned to it.
+<input type="text" name="filename" value=""/>
+*/
+UploadInfo.AddFormContent("filename", "myfile.cpp");
 
 /* The details of the upload of the dummy test file can be found under
 http://posttestserver.com/data/[year]/[month]/[day]/restclientcpptests/ */
@@ -87,17 +97,51 @@ HTTPClient.GetText("https://www.google.com", strWebPage, lWebPageCode);
 /* lWebPageCode should be equal to 200 if the request is successfully executed */
 ```
 
+There's also REST methods modeled after the most common HTTP commands:
+
+```cpp
+CHTTPClient::HeadersMap RequestHeaders;
+CHTTPClient::HttpResponse ServerResponse;
+
+// HEAD request
+pRESTClient->Head("http://httpbin.org/get", RequestHeaders, ServerResponse);
+
+// GET request
+pRESTClient->Get("http://httpbin.org/get", RequestHeaders, ServerResponse);
+
+// POST request
+std::string strPostData = "data";
+RequestHeaders.emplace("Content-Type", "text/text");
+pRESTClient->Post("http://httpbin.org/post", RequestHeaders, strPostData, ServerResponse);
+
+// PUT request
+std::string strPutData = "data";
+RequestHeaders.emplace("Content-Type", "text/text");
+
+// 1. with a string
+pRESTClient->Put("http://httpbin.org/put", RequestHeaders, strPutData, ServerResponse);
+
+// 2. with a vector of char
+CHTTPClient::ByteBuffer Buffer; // or std::vector<char>
+Buffer.push_back('d');
+Buffer.push_back('a');
+Buffer.push_back('t');
+Buffer.push_back('a');
+pRESTClient->Put("http://httpbin.org/put", RequestHeaders, Buffer, ServerResponse)
+
+// DELETE request
+pRESTClient->Del("http://httpbin.org/delete", RequestHeaders, ServerResponse);
+
+// Server's response
+ServerResponse.iCode; // response's code
+ServerResponse.mapHeaders; // response's headers
+ServerResponse.strBody; // response's body
+```
+
 You can also set parameters such as the time out (in seconds), the HTTP proxy server etc... before sending
 your request.
 
-To create and remove a remote empty directory :
-
-```cpp
-/* creates a directory "bookmarks" under http://127.0.0.1:21/documents/ */
-HTTPClient.
-```
-
-Always check that the methods above returns true, otherwise, that means that  the request wasn't properly
+Always check that all the methods above return true, otherwise, that means that  the request wasn't properly
 executed.
 
 Finally cleanup can be done automatically if the object goes out of scope. If the log printing is enabled,
@@ -128,19 +172,19 @@ The unit test "TestDownloadFile" demonstrates how to use a progress function to 
 
 A mutex is used to increment/decrement atomically the count of CHTTPClient objects.
 
-`curl_global_init` is called when the count reaches one and `curl_global_cleanup` is called when the counter
-become zero.
+`curl_global_init` is called when the count of CHTTPClient objects equals to zero (when instanciating the first object).
+`curl_global_cleanup` is called when the count of CHTTPClient objects become zero (when all CHTTPClient objects are destroyed).
 
 Do not share CHTTPClient objects across threads as this would mean accessing libcurl handles from multiple threads
 at the same time which is not allowed.
 
-The method SetNoSignal can be set to skip all signal handling. This is important in multi-threaded applications as DNS
+The method SetNoSignal can be used to skip all signal handling. This is important in multi-threaded applications as DNS
 resolution timeouts use signals. The signal handlers quite readily get executed on other threads.
 
 ## HTTP Proxy Tunneling Support
 
 An HTTP Proxy can be set to use for the upcoming request.
-To specify a port number, append :[port] to the end of the host name. If not specified, `libcurl` will default to using port 1080 for proxies. The proxy string may be prefixed with `http://` or `https://`. If no HTTP(S) scheme is specified, the address provided to `libcurl` will be prefixed with `http://` to specify an HTTP proxy. A proxy host string can embedded user + password.
+To specify a port number, append :[port] to the end of the host name. If not specified, `libcurl` will default to using port 1080 for proxies. The proxy string may be prefixed with `http://` or `https://`. If no HTTP(S) scheme is specified, the address provided to `libcurl` will be prefixed with `http://` to specify an HTTP proxy. A proxy host string can embed user + password.
 The operation will be tunneled through the proxy as curl option `CURLOPT_HTTPPROXYTUNNEL` is enabled by default.
 A numerical IPv6 address must be written within [brackets].
 
@@ -158,7 +202,7 @@ HTTPClient.GetText("https://www.google.com", strWebPage, lWebPageCode);
 ```
 
 ## Installation
-You will need CMake to generate a makefile for the static library to build the tests or the code coverage 
+You will need CMake to generate a makefile for the static library or to build the tests/code coverage 
 program.
 
 Also make sure you have libcurl and Google Test installed.
@@ -200,7 +244,7 @@ To run it, you must indicate the path of the INI conf file (see the section belo
 [simpleini](https://github.com/brofield/simpleini) is used to gather unit tests parameters from
 an INI configuration file. You need to fill that file with some parameters.
 You can also disable some tests (HTTP proxy for instance) and indicate
-parameters only for the enabled tests. A template of the INI file exists already under TestHTTP/
+parameters only for the enabled tests. A template of the INI file already exists under TestHTTP/
 
 
 Example : (Proxy tests are enbaled)
@@ -252,6 +296,10 @@ make coverage_httpclient
 If everything is OK, the results will be found under ./TestHTTP/coverage/index.html
 
 Under Visual Studio, you can simply use OpenCppCoverage (https://opencppcoverage.codeplex.com/)
+
+## CppCheck Compliancy
+
+The C++ code of the HTTPClient class is 100% Cppcheck compliant.
 
 ## Contribute
 All contributions are highly appreciated. This includes updating documentation, writing code and unit tests
