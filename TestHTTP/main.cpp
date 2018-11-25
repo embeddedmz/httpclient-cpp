@@ -275,10 +275,8 @@ TEST_F(HTTPTest, TestUploadForm)
    UploadInfo.AddFormFile("submitted", fileName.str());
    UploadInfo.AddFormContent("filename", fileName.str());
 
-   /* The details of the upload of the dummy test file can be found under
-   http://posttestserver.com/data/[year]/[month]/[day]/restclientcpptests/ */
-   m_pHTTPClient->UploadForm("http://posttestserver.com/post.php?dir=restclientcpptests",
-               UploadInfo, lResultHTTPCode);
+   /* Toilet : kv6od-1543167696 */
+   m_pHTTPClient->UploadForm("http://ptsv2.com/t/kv6od-1543167696/post", UploadInfo, lResultHTTPCode);
 
    EXPECT_EQ(200, lResultHTTPCode);
 
