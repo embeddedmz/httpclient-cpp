@@ -353,7 +353,7 @@ TEST_F(RestClientTest, TestRestClientGETBodyCode)
    rapidjson::Value::MemberIterator itTokenUrl = document.FindMember("url");
    ASSERT_TRUE(itTokenUrl != document.MemberEnd());
    ASSERT_TRUE(itTokenUrl->value.IsString());
-   EXPECT_STREQ("http://httpbin.org/get", itTokenUrl->value.GetString());
+   EXPECT_STREQ("https://httpbin.org/get", itTokenUrl->value.GetString());
 
    rapidjson::Value::MemberIterator itTokenHeaders = document.FindMember("headers");
    ASSERT_TRUE(itTokenHeaders != document.MemberEnd());
@@ -428,7 +428,7 @@ TEST_F(RestClientTest, TestRestClientPOSTBody)
    rapidjson::Value::MemberIterator itTokenUrl = document.FindMember("url");
    ASSERT_TRUE(itTokenUrl != document.MemberEnd());
    ASSERT_TRUE(itTokenUrl->value.IsString());
-   EXPECT_STREQ("http://httpbin.org/post", itTokenUrl->value.GetString());
+   EXPECT_STREQ("https://httpbin.org/post", itTokenUrl->value.GetString());
 
    rapidjson::Value::MemberIterator itTokenHeaders = document.FindMember("headers");
    ASSERT_TRUE(itTokenHeaders != document.MemberEnd());
@@ -473,7 +473,7 @@ TEST_F(RestClientTest, TestRestClientPUTString)
    rapidjson::Value::MemberIterator itTokenUrl = document.FindMember("url");
    ASSERT_TRUE(itTokenUrl != document.MemberEnd());
    ASSERT_TRUE(itTokenUrl->value.IsString());
-   EXPECT_STREQ("http://httpbin.org/put", itTokenUrl->value.GetString());
+   EXPECT_STREQ("https://httpbin.org/put", itTokenUrl->value.GetString());
 
    rapidjson::Value::MemberIterator itTokenHeaders = document.FindMember("headers");
    ASSERT_TRUE(itTokenHeaders != document.MemberEnd());
@@ -505,7 +505,7 @@ TEST_F(RestClientTest, TestRestClientPUTBuffer)
    rapidjson::Value::MemberIterator itTokenUrl = document.FindMember("url");
    ASSERT_TRUE(itTokenUrl != document.MemberEnd());
    ASSERT_TRUE(itTokenUrl->value.IsString());
-   EXPECT_STREQ("http://httpbin.org/put", itTokenUrl->value.GetString());
+   EXPECT_STREQ("https://httpbin.org/put", itTokenUrl->value.GetString());
 
    rapidjson::Value::MemberIterator itTokenHeaders = document.FindMember("headers");
    ASSERT_TRUE(itTokenHeaders != document.MemberEnd());
@@ -552,7 +552,7 @@ TEST_F(RestClientTest, TestRestClientDeleteBody)
    rapidjson::Value::MemberIterator itTokenUrl = document.FindMember("url");
    ASSERT_TRUE(itTokenUrl != document.MemberEnd());
    ASSERT_TRUE(itTokenUrl->value.IsString());
-   EXPECT_STREQ("http://httpbin.org/delete", itTokenUrl->value.GetString());
+   EXPECT_STREQ("https://httpbin.org/delete", itTokenUrl->value.GetString());
 
    rapidjson::Value::MemberIterator itTokenHeaders = document.FindMember("headers");
    ASSERT_TRUE(itTokenHeaders != document.MemberEnd());
