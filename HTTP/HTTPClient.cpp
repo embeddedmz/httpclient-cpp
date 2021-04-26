@@ -242,17 +242,13 @@ const CURLcode CHTTPClient::Perform()
       curl_easy_setopt(m_pCurlSession, CURLOPT_NOPROGRESS, 0L);
    }
 
-   // SSL
    if (m_bHTTPS)
    {
-      curl_easy_setopt(m_pCurlSession, CURLOPT_USE_SSL, CURLUSESSL_ALL);
+       // SSL (TLS)
+       curl_easy_setopt(m_pCurlSession, CURLOPT_USE_SSL, CURLUSESSL_ALL);
+       curl_easy_setopt(m_pCurlSession, CURLOPT_SSL_VERIFYPEER, (m_eSettingsFlags & VERIFY_PEER) ? 1L : 0L);
+       curl_easy_setopt(m_pCurlSession, CURLOPT_SSL_VERIFYPEER, (m_eSettingsFlags & CURLOPT_SSL_VERIFYHOST) ? 2L : 0L);
    }
-
-   if (m_bHTTPS && !(m_eSettingsFlags & VERIFY_PEER))
-      curl_easy_setopt(m_pCurlSession, CURLOPT_SSL_VERIFYPEER, 0L);
-
-   if (m_bHTTPS && !(m_eSettingsFlags & VERIFY_HOST))
-      curl_easy_setopt(m_pCurlSession, CURLOPT_SSL_VERIFYHOST, 0L); // use 2L for strict name check
 
    if (m_bHTTPS && !s_strCertificationAuthorityFile.empty())
       curl_easy_setopt(m_pCurlSession, CURLOPT_CAINFO, s_strCertificationAuthorityFile.c_str());

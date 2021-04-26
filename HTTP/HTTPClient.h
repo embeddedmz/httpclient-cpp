@@ -241,6 +241,10 @@ private:
    CurlHandle& m_curlHandle;
 };
 
+inline CHTTPClient::SettingsFlag operator|(CHTTPClient::SettingsFlag a, CHTTPClient::SettingsFlag b) {
+    return static_cast<CHTTPClient::SettingsFlag>(static_cast<int>(a) | static_cast<int>(b));
+}
+
 // Logs messages
 #define LOG_ERROR_EMPTY_HOST_MSG                "[HTTPClient][Error] Empty hostname."
 #define LOG_WARNING_OBJECT_NOT_CLEANED          "[HTTPClient][Warning] Object was freed before calling " \

@@ -121,10 +121,10 @@ TEST(HTTPClient, TestSession)
    EXPECT_EQ(CHTTPClient::SettingsFlag::ALL_FLAGS, HTTPClient.GetSettingsFlags());
 
    /* after init. a session */
-   ASSERT_TRUE(HTTPClient.InitSession(true, CHTTPClient::ENABLE_LOG));
+   ASSERT_TRUE(HTTPClient.InitSession(true, CHTTPClient::ENABLE_LOG | CHTTPClient::VERIFY_PEER));
 
    // check that the parameters provided to InitSession
-   EXPECT_EQ(CHTTPClient::ENABLE_LOG, HTTPClient.GetSettingsFlags());
+   EXPECT_EQ(CHTTPClient::ENABLE_LOG | CHTTPClient::VERIFY_PEER, HTTPClient.GetSettingsFlags());
    EXPECT_TRUE(HTTPClient.GetHTTPS());
 
    EXPECT_TRUE(HTTPClient.GetCurlPointer() != nullptr);
