@@ -7,9 +7,7 @@
 #include "HTTPClient.h"
 
 // Static members initialization
-volatile int   CHTTPClient::s_iCurlSession = 0;
 std::string    CHTTPClient::s_strCertificationAuthorityFile;
-std::mutex     CHTTPClient::s_mtxCurlSession;
 
 #ifdef DEBUG_CURL
 std::string CHTTPClient::s_strCurlTraceLogDirectory;
@@ -29,15 +27,10 @@ CHTTPClient::CHTTPClient(LogFnCallback Logger) :
    m_bProgressCallbackSet(false),
    m_eSettingsFlags(ALL_FLAGS),
    m_pCurlSession(nullptr),
-   m_pHeaderlist(nullptr)
+   m_pHeaderlist(nullptr),
+   m_curlHandle(CurlHandle::instance())
 {
-   s_mtxCurlSession.lock();
-   if (s_iCurlSession++ == 0)
-   {
-      /* In windows, this will init the winsock stuff */
-      curl_global_init(CURL_GLOBAL_ALL);
-   }
-   s_mtxCurlSession.unlock();
+
 }
 
 /**
@@ -53,13 +46,6 @@ CHTTPClient::~CHTTPClient()
 
       CleanupSession();
    }
-
-   s_mtxCurlSession.lock();
-   if (--s_iCurlSession <= 0)
-   {
-      curl_global_cleanup();
-   }
-   s_mtxCurlSession.unlock();
 }
 
 /**

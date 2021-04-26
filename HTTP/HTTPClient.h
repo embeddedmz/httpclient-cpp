@@ -34,6 +34,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "CurlHandle.h"
+
 class CHTTPClient
 {
 public:
@@ -120,7 +122,6 @@ public:
    const bool InitSession(const bool& bHTTPS = false,
                           const SettingsFlag& SettingsFlags = ALL_FLAGS);
    virtual const bool CleanupSession();
-   static int GetCurlSessionCount() { return s_iCurlSession; }
    const CURL* GetCurlPointer() const { return m_pCurlSession; }
 
    // HTTP requests
@@ -219,9 +220,6 @@ protected:
    std::string          m_strSSLCertFile;
    std::string          m_strSSLKeyFile;
    std::string          m_strSSLKeyPwd;
-   
-   static std::mutex     s_mtxCurlSession; // mutex used to manage API global operations
-   volatile static int   s_iCurlSession;   // Count of the actual sessions
 
    CURL*         m_pCurlSession;
    int           m_iCurlTimeout;
@@ -239,6 +237,8 @@ private:
    static std::string s_strCurlTraceLogDirectory;
    mutable std::ofstream      m_ofFileCurlTrace;
 #endif
+
+   CurlHandle& m_curlHandle;
 };
 
 // Logs messages

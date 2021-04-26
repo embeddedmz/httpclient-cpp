@@ -180,7 +180,6 @@ TEST(HTTPClient, TestCleanUpWithoutInit)
 TEST(HTTPClient, TestMultithreading)
 {
    const char* arrDataArray[3] = { "Thread 1", "Thread 2", "Thread 3" };
-   unsigned uInitialCount = CHTTPClient::GetCurlSessionCount();
 
    auto ThreadFunction = [](const char* pszThreadName)
    {
@@ -201,8 +200,6 @@ TEST(HTTPClient, TestMultithreading)
    FirstThread.join();                 // pauses until first finishes
    SecondThread.join();                // pauses until second finishes
    ThirdThread.join();                 // pauses until third finishes
-
-   ASSERT_EQ(uInitialCount, CHTTPClient::GetCurlSessionCount());
 }
 
 // HTTP tests using a fixture
@@ -353,7 +350,7 @@ TEST_F(RestClientTest, TestRestClientGETBodyCode)
    rapidjson::Value::MemberIterator itTokenUrl = document.FindMember("url");
    ASSERT_TRUE(itTokenUrl != document.MemberEnd());
    ASSERT_TRUE(itTokenUrl->value.IsString());
-   EXPECT_STREQ("https://httpbin.org/get", itTokenUrl->value.GetString());
+   EXPECT_STREQ("http://httpbin.org/get", itTokenUrl->value.GetString());
 
    rapidjson::Value::MemberIterator itTokenHeaders = document.FindMember("headers");
    ASSERT_TRUE(itTokenHeaders != document.MemberEnd());
@@ -428,7 +425,7 @@ TEST_F(RestClientTest, TestRestClientPOSTBody)
    rapidjson::Value::MemberIterator itTokenUrl = document.FindMember("url");
    ASSERT_TRUE(itTokenUrl != document.MemberEnd());
    ASSERT_TRUE(itTokenUrl->value.IsString());
-   EXPECT_STREQ("https://httpbin.org/post", itTokenUrl->value.GetString());
+   EXPECT_STREQ("http://httpbin.org/post", itTokenUrl->value.GetString());
 
    rapidjson::Value::MemberIterator itTokenHeaders = document.FindMember("headers");
    ASSERT_TRUE(itTokenHeaders != document.MemberEnd());
@@ -473,7 +470,7 @@ TEST_F(RestClientTest, TestRestClientPUTString)
    rapidjson::Value::MemberIterator itTokenUrl = document.FindMember("url");
    ASSERT_TRUE(itTokenUrl != document.MemberEnd());
    ASSERT_TRUE(itTokenUrl->value.IsString());
-   EXPECT_STREQ("https://httpbin.org/put", itTokenUrl->value.GetString());
+   EXPECT_STREQ("http://httpbin.org/put", itTokenUrl->value.GetString());
 
    rapidjson::Value::MemberIterator itTokenHeaders = document.FindMember("headers");
    ASSERT_TRUE(itTokenHeaders != document.MemberEnd());
@@ -505,7 +502,7 @@ TEST_F(RestClientTest, TestRestClientPUTBuffer)
    rapidjson::Value::MemberIterator itTokenUrl = document.FindMember("url");
    ASSERT_TRUE(itTokenUrl != document.MemberEnd());
    ASSERT_TRUE(itTokenUrl->value.IsString());
-   EXPECT_STREQ("https://httpbin.org/put", itTokenUrl->value.GetString());
+   EXPECT_STREQ("http://httpbin.org/put", itTokenUrl->value.GetString());
 
    rapidjson::Value::MemberIterator itTokenHeaders = document.FindMember("headers");
    ASSERT_TRUE(itTokenHeaders != document.MemberEnd());
@@ -552,7 +549,7 @@ TEST_F(RestClientTest, TestRestClientDeleteBody)
    rapidjson::Value::MemberIterator itTokenUrl = document.FindMember("url");
    ASSERT_TRUE(itTokenUrl != document.MemberEnd());
    ASSERT_TRUE(itTokenUrl->value.IsString());
-   EXPECT_STREQ("https://httpbin.org/delete", itTokenUrl->value.GetString());
+   EXPECT_STREQ("http://httpbin.org/delete", itTokenUrl->value.GetString());
 
    rapidjson::Value::MemberIterator itTokenHeaders = document.FindMember("headers");
    ASSERT_TRUE(itTokenHeaders != document.MemberEnd());
