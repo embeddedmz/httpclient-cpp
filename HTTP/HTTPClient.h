@@ -133,6 +133,8 @@ public:
                            const std::string& strURL,
                            long& lHTTPStatusCode);
 
+   const bool DownloadFile(std::vector<unsigned char>& data, const std::string& strURL, long& lHTTPStatusCode);
+
    const bool UploadForm(const std::string& strURL,
                          const PostFormInfo& data,
                          long& lHTTPStatusCode);
@@ -170,6 +172,11 @@ public:
    static void SetCurlTraceLogDirectory(const std::string& strPath);
 #endif
 
+#ifdef WINDOWS
+   static std::string AnsiToUtf8(const std::string& ansiStr);
+   static std::wstring Utf8ToUtf16(const std::string& str);
+#endif
+
 protected:
    // payload to upload on POST requests.
    struct UploadObject
@@ -181,7 +188,7 @@ protected:
 
    /* common operations are performed here */
    inline const CURLcode Perform();
-   inline void CheckURL(const std::string& strURL);
+   inline void UpdateURL(const std::string& strURL);
    inline const bool InitRestRequest(const std::string& strUrl, const HeadersMap& Headers,
                                HttpResponse& Response);
    inline const bool PostRestRequest(const CURLcode ePerformCode, HttpResponse& Response);
@@ -189,6 +196,7 @@ protected:
    // Curl callbacks
    static size_t WriteInStringCallback(void* ptr, size_t size, size_t nmemb, void* data);
    static size_t WriteToFileCallback(void* ptr, size_t size, size_t nmemb, void* data);
+   static size_t WriteToMemoryCallback(void* ptr, size_t size, size_t nmemb, void* data);
    static size_t ReadFromFileCallback(void* ptr, size_t size, size_t nmemb, void* stream);
    static size_t ThrowAwayCallback(void* ptr, size_t size, size_t nmemb, void* data);
    static size_t RestWriteCallback(void* ptr, size_t size, size_t nmemb, void* userdata);

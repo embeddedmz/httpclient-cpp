@@ -223,6 +223,7 @@ TEST_F(HTTPTest, TestDownloadFile)
    // to display a beautiful progress bar on console
    m_pHTTPClient->SetProgressFnCallback(nullptr, &TestProgressCallback);
 
+#ifdef LINUX
    ASSERT_TRUE(m_pHTTPClient->DownloadFile("test.pem", "https://curl.haxx.se/ca/cacert.pem", lHTTPSCode));
    /* to properly show the progress bar */
    std::cout << std::endl;
@@ -233,6 +234,36 @@ TEST_F(HTTPTest, TestDownloadFile)
 
    /* delete test file */
    EXPECT_TRUE(remove("test.pem") == 0);
+#else
+   // Convert file name from ANSI to UTF8
+   std::string localFile = CHTTPClient::AnsiToUtf8("test_nom_accentué.pem");
+
+   ASSERT_TRUE(m_pHTTPClient->DownloadFile(localFile, "https://curl.haxx.se/ca/cacert.pem", lHTTPSCode));
+   /* to properly show the progress bar */
+   std::cout << std::endl;
+
+   /* TODO : we can check the SHA1 of the downloaded file with a value provided in the INI file */
+
+   EXPECT_EQ(200, lHTTPSCode);
+
+   /* delete test file */
+   EXPECT_TRUE(remove("test_nom_accentué.pem") == 0);
+#endif
+}
+
+TEST_F(HTTPTest, TestDownloadFileToMemory)
+{
+    std::vector<unsigned char> output;
+    long lHTTPSCode = 0;
+
+    // to display a beautiful progress bar on console
+    m_pHTTPClient->SetProgressFnCallback(nullptr, &TestProgressCallback);
+
+    ASSERT_TRUE(m_pHTTPClient->DownloadFile(output, "https://curl.haxx.se/ca/cacert.pem", lHTTPSCode));
+    /* to properly show the progress bar */
+    std::cout << std::endl;
+
+    EXPECT_EQ(200, lHTTPSCode);
 }
 
 // check for failure: inexistant file

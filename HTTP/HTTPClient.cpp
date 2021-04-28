@@ -170,7 +170,7 @@ const bool CHTTPClient::CleanupSession()
  *
  * @param [in] strURL user URI
  */
-inline void CHTTPClient::CheckURL(const std::string& strURL)
+inline void CHTTPClient::UpdateURL(const std::string& strURL)
 {
    std::string strTmp = strURL;
 
@@ -285,7 +285,7 @@ const CURLcode CHTTPClient::Perform()
 /**
  * @brief requests the content of a URI
  *
- * @param [in] strURL URI of the remote location (with the file name).
+ * @param [in] strURL URI of the remote location (with the file name) encoded in UTF-8 format.
  * @param [out] strOutput reference to an output string.
  * @param [out] lHTTPStatusCode HTTP Status code of the response.
  *
@@ -320,7 +320,7 @@ const bool CHTTPClient::GetText(const std::string& strURL,
    // Reset is mandatory to avoid bad surprises
    curl_easy_reset(m_pCurlSession);
 
-   CheckURL(strURL);
+   UpdateURL(strURL);
 
    curl_easy_setopt(m_pCurlSession, CURLOPT_HTTPGET, 1L);
    curl_easy_setopt(m_pCurlSession, CURLOPT_WRITEFUNCTION, WriteInStringCallback);
@@ -346,8 +346,8 @@ const bool CHTTPClient::GetText(const std::string& strURL,
 /**
  * @brief Downloads a remote file to a local file.
  *
- * @param [in] strLocalFile Complete path of the local file to download.
- * @param [in] strURL URI of the remote location (with the file name).
+ * @param [in] strLocalFile Complete path of the local file to download in UTF-8 format.
+ * @param [in] strURL URI of the remote location (with the file name) encoded in UTF-8 format.
  * @param [out] lHTTPStatusCode HTTP Status code of the response.
  *
  * @retval true   Successfully downloaded the file.
@@ -370,10 +370,16 @@ const bool CHTTPClient::DownloadFile(const std::string& strLocalFile,
    // Reset is mandatory to avoid bad surprises
    curl_easy_reset(m_pCurlSession);
 
-   CheckURL(strURL);
+   UpdateURL(strURL);
 
    std::ofstream ofsOutput;
-   ofsOutput.open(strLocalFile, std::ofstream::out | std::ofstream::binary | std::ofstream::trunc);
+   ofsOutput.open(
+#ifdef LINUX
+       strLocalFile, // UTF-8
+#else
+       Utf8ToUtf16(strLocalFile),
+#endif
+       std::ofstream::out | std::ofstream::binary | std::ofstream::trunc);
 
    if (ofsOutput)
    {
@@ -414,10 +420,60 @@ const bool CHTTPClient::DownloadFile(const std::string& strLocalFile,
 }
 
 /**
+ * @brief downloads a remote file to memory
+ *
+ * @param [out] data vector of bytes
+ * @param [in] strURL URI of the remote location (with the file name) encoded in UTF-8 format.
+ * @param [out] lHTTPStatusCode HTTP Status code of the response.
+ *
+ * @retval true   Successfully downloaded the file.
+ * @retval false  The content couldn't be downloaded. Check the log messages for
+ * more information.
+ */
+const bool CHTTPClient::DownloadFile(std::vector<unsigned char>& data, const std::string& strURL, long& lHTTPStatusCode) {
+	if (strURL.empty())
+		return false;
+
+	if (!m_pCurlSession)
+	{
+		if (m_eSettingsFlags & ENABLE_LOG)
+			m_oLog(LOG_ERROR_CURL_NOT_INIT_MSG);
+
+		return false;
+	}
+
+	data.clear();
+
+	// Reset is mandatory to avoid bad surprises
+	curl_easy_reset(m_pCurlSession);
+
+	UpdateURL(strURL);
+
+	curl_easy_setopt(m_pCurlSession, CURLOPT_HTTPGET, 1L);
+	curl_easy_setopt(m_pCurlSession, CURLOPT_WRITEFUNCTION, WriteToMemoryCallback);
+	curl_easy_setopt(m_pCurlSession, CURLOPT_WRITEDATA, &data);
+
+	CURLcode res = Perform();
+
+	curl_easy_getinfo(m_pCurlSession, CURLINFO_RESPONSE_CODE, &lHTTPStatusCode);
+
+	if (res != CURLE_OK)
+	{
+		if (m_eSettingsFlags & ENABLE_LOG)
+			m_oLog(StringFormat(LOG_ERROR_CURL_DOWNLOAD_FAILURE_FORMAT, "Download to a byte buffer",
+				strURL.c_str(), res, curl_easy_strerror(res), lHTTPStatusCode));
+
+		return false;
+	}
+
+	return true;
+}
+
+/**
  * @brief uploads a POST form
  *
  *
- * @param [in] strURL URL to which the form will be posted.
+ * @param [in] strURL URL to which the form will be posted encoded in UTF-8 format.
  * @param [in] data post form information
  * @param [out] lHTTPStatusCode HTTP Status code of the response.
  *
@@ -445,7 +501,7 @@ const bool CHTTPClient::UploadForm(const std::string& strURL,
    // Reset is mandatory to avoid bad surprises
    curl_easy_reset(m_pCurlSession);
 
-   CheckURL(strURL);
+   UpdateURL(strURL);
 
    /** Now specify we want to POST data */
    curl_easy_setopt(m_pCurlSession, CURLOPT_POST, 1L);
@@ -503,8 +559,8 @@ CHTTPClient::PostFormInfo::~PostFormInfo()
 /**
  * @brief set the name and the value of the HTML "file" form's input
  *
- * @param fieldName name of the "file" input
- * @param fieldValue path to the file to upload
+ * @param fieldName name of the "file" input encoded in UTF8.
+ * @param fieldValue path to the file to upload encoded in UTF8.
  */
 void CHTTPClient::PostFormInfo::AddFormFile(const std::string& strFieldName,
                                             const std::string& strFieldValue)
@@ -519,8 +575,8 @@ void CHTTPClient::PostFormInfo::AddFormFile(const std::string& strFieldName,
  * @brief set the name and the value of an HTML form's input
  * (other than "file" like "text", "hidden" or "submit")
  *
- * @param fieldName name of the input element
- * @param fieldValue value to be assigned to the input element
+ * @param fieldName name of the input element encoded in UTF8 for Linux and in ANSI for Windows (so the file gets located and uploaded).
+ * @param fieldValue value to be assigned to the input element encoded in UTF8 for Linux and in ANSI for Windows.
  */
 void CHTTPClient::PostFormInfo::AddFormContent(const std::string& strFieldName,
                                                const std::string& strFieldValue)
@@ -538,6 +594,7 @@ void CHTTPClient::PostFormInfo::AddFormContent(const std::string& strFieldName,
 * some common operations to REST requests are performed here,
 * the others are performed in Perform method
 *
+* @param [in] strUrl URI encoded in UTF-8 format.
 * @param [in] Headers headers to send
 * @param [out] Response response data
 */
@@ -562,7 +619,7 @@ inline const bool CHTTPClient::InitRestRequest(const std::string& strUrl,
    // Reset is mandatory to avoid bad surprises
    curl_easy_reset(m_pCurlSession);
 
-   CheckURL(strUrl);
+   UpdateURL(strUrl);
 
    // set the received body's callback function
    curl_easy_setopt(m_pCurlSession, CURLOPT_WRITEFUNCTION, &CHTTPClient::RestWriteCallback);
@@ -619,7 +676,7 @@ inline const bool CHTTPClient::PostRestRequest(const CURLcode ePerformCode,
 /**
 * @brief performs a HEAD request
 *
-* @param [in] strUrl url to request
+* @param [in] strUrl url to request encoded in UTF-8 format.
 * @param [in] Headers headers to send
 * @param [out] Response response data
 *
@@ -647,7 +704,7 @@ const bool CHTTPClient::Head(const std::string& strUrl,
 /**
 * @brief performs a GET request
 *
-* @param [in] strUrl url to request
+* @param [in] strUrl url to request encoded in UTF-8 format.
 * @param [in] Headers headers to send
 * @param [out] Response response data
 *
@@ -674,7 +731,7 @@ const bool CHTTPClient::Get(const std::string& strUrl,
 /**
 * @brief performs a DELETE request
 *
-* @param [in] strUrl url to request
+* @param [in] strUrl url to request encoded in UTF-8 format.
 * @param [in] Headers headers to send
 * @param [out] Response response data
 *
@@ -722,7 +779,7 @@ const bool CHTTPClient::Post(const std::string& strUrl,
 /**
 * @brief performs a PUT request with a string
 *
-* @param [in] strUrl url to request
+* @param [in] strUrl url to request encoded in UTF-8 format.
 * @param [in] Headers headers to send
 * @param [out] Response response data
 *
@@ -762,7 +819,7 @@ const bool CHTTPClient::Put(const std::string& strUrl, const CHTTPClient::Header
 /**
 * @brief performs a PUT request with a byte buffer (vector of char)
 *
-* @param [in] strUrl url to request
+* @param [in] strUrl url to request encoded in UTF-8 format.
 * @param [in] Headers headers to send
 * @param [out] Response response data
 *
@@ -802,52 +859,24 @@ const bool CHTTPClient::Put(const std::string& strUrl, const CHTTPClient::Header
 // STRING HELPERS
 
 /**
-* @brief returns a formatted string
-*
-* @param [in] strFormat string with one or many format specifiers
-* @param [in] parameters to be placed in the format specifiers of strFormat
-*
-* @retval string formatted string
-*/
-std::string CHTTPClient::StringFormat(const std::string strFormat, ...)
-{
-   int n = (static_cast<int>(strFormat.size())) * 2; // Reserve two times as much as the length of the strFormat
-   
-   std::unique_ptr<char[]> pFormatted;
-
-   va_list ap;
-
-   while(true)
-   {
-      pFormatted.reset(new char[n]); // Wrap the plain char array into the unique_ptr
-      strcpy(&pFormatted[0], strFormat.c_str());
-      
-      va_start(ap, strFormat);
-      int iFinaln = vsnprintf(&pFormatted[0], n, strFormat.c_str(), ap);
-      va_end(ap);
-      
-      if (iFinaln < 0 || iFinaln >= n)
-      {
-         n += abs(iFinaln - n + 1);
-      }
-      else
-      {
-         break;
-      }
-   }
-
-   return std::string(pFormatted.get());
+ * @brief returns a formatted string
+ *
+ * @param [in] strFormat string with one or many format specifiers
+ * @param [in] parameters to be placed in the format specifiers of strFormat
+ *
+ * @retval string formatted string
+ */
+std::string CHTTPClient::StringFormat(std::string strFormat, ...) {
+    va_list args;
+    va_start(args, strFormat);
+    size_t len = std::vsnprintf(NULL, 0, strFormat.c_str(), args);
+    va_end(args);
+    std::vector<char> vec(len + 1);
+    va_start(args, strFormat);
+    std::vsnprintf(&vec[0], len + 1, strFormat.c_str(), args);
+    va_end(args);
+    return &vec[0];
 }
-/*std::string CHTTPClient::StringFormat(const std::string strFormat, ...)
-{
-   char buffer[1024];
-   va_list args;
-   va_start(args, strFormat);
-   vsnprintf(buffer, 1024, strFormat.c_str(), args);
-   va_end (args);
-   return std::string(buffer);
-}
-*/
 
 /**
 * @brief removes leading and trailing whitespace from a string
@@ -923,6 +952,27 @@ size_t CHTTPClient::WriteToFileCallback(void* buff, size_t size, size_t nmemb, v
    }
 
    return size * nmemb;
+}
+
+/**
+ * @brief stores the server response in std::vector<char>
+ *
+ * @param buff pointer of max size (size*nmemb) to read data from it
+ * @param size size parameter
+ * @param nmemb memblock parameter
+ * @param userdata pointer to user data (file stream)
+ *
+ * @return (size * nmemb)
+ */
+size_t CHTTPClient::WriteToMemoryCallback(void* buff, size_t size, size_t nmemb, void* data) {
+    if ((size == 0) || (nmemb == 0) || (data == nullptr)) return 0;
+
+    auto* vec = reinterpret_cast<std::vector<unsigned char> *>(data);
+    size_t ssize = size * nmemb;
+    std::copy(reinterpret_cast<unsigned char*>(buff), reinterpret_cast<unsigned char*>(buff) + ssize,
+        std::back_inserter(*vec));
+
+    return ssize;
 }
 
 /**
@@ -1146,5 +1196,31 @@ void CHTTPClient::EndCurlDebug() const
       m_ofFileCurlTrace << "###########################################" << std::endl;
       m_ofFileCurlTrace.close();
    }
+}
+#endif
+
+#ifdef WINDOWS
+std::string CHTTPClient::AnsiToUtf8(const std::string& codepage_str) {
+    // Transcode Windows ANSI to UTF-16
+    int size = MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, codepage_str.c_str(), codepage_str.length(), nullptr, 0);
+    std::wstring utf16_str(size, '\0');
+    MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, codepage_str.c_str(), codepage_str.length(), &utf16_str[0], size);
+
+    // Transcode UTF-16 to UTF-8
+    int utf8_size = WideCharToMultiByte(CP_UTF8, 0, utf16_str.c_str(), utf16_str.length(), nullptr, 0, nullptr, nullptr);
+    std::string utf8_str(utf8_size, '\0');
+    WideCharToMultiByte(CP_UTF8, 0, utf16_str.c_str(), utf16_str.length(), &utf8_str[0], utf8_size, nullptr, nullptr);
+
+    return utf8_str;
+}
+
+std::wstring CHTTPClient::Utf8ToUtf16(const std::string& str) {
+    std::wstring ret;
+    int len = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), str.length(), NULL, 0);
+    if (len > 0) {
+        ret.resize(len);
+        MultiByteToWideChar(CP_UTF8, 0, str.c_str(), str.length(), &ret[0], len);
+    }
+    return ret;
 }
 #endif
