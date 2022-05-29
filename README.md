@@ -13,6 +13,8 @@ Compilation has been tested with:
 Underlying libraries:
 - [libcurl](http://curl.haxx.se/libcurl/)
 
+Windows Users : vcpkg (Microsoft C++ Library Manager) can be used to easily install libcurl and generate the Visual Studio solution with CMake. With vcpkg, no need to manually copy the DLL in the output directory, vcpkg handles all that ! Look at "Building under Windows via Visual Studio" section, for instructions.
+
 ## Usage
 Create an object and provide to its constructor a callable object (for log printing) having this signature :
 
@@ -232,7 +234,35 @@ To directly run the unit test binary, you must indicate the path of the INI conf
 
 ### Building under Windows via Visual Studio
 
-This can be enhanced in future...
+1. New Procedure (with vcpkg) :
+
+Install [vcpkg](https://github.com/microsoft/vcpkg) then install libcurl (use 'x86-windows' for the 32-bit version) :
+```Shell
+.\vcpkg install curl curl[openssl] --triplet=x64-windows
+```
+
+If you have a french Visual Studio version, don't forget to install the english language pack (vcpkg will tell you this anyway).
+
+Download and install the latest version of CMake : https://cmake.org/download/ (e.g. Windows win64-x64 Installer)
+
+Open CMake (cmake-gui)
+
+In "Where is the source code", put the httpclient-cpp path (e.g. C:/Users/Amine/Documents/Work/PROJECTS/GitHub/httpclient-cpp), where the main CMakeLists.txt file exist.
+
+In "Where to build binaries", paste the directory where you want to build the project (e.g. C:/Users/Amine/Documents/Work/PROJECTS/GitHub/httpclient_build)
+
+Click on "Configure".
+
+Select your Visual Studio version (if it isn't already set).
+In "Optional platform for generator", you can leave it empty (x64 by default) or choose another value.
+
+Click on the radio button "Specify toolchain file for cross-compiling, then hit the "Next" button.
+
+In "Specify the toolchain file", browse to vcpkg toolchain file (vcpkg/scripts/buildsystems/vcpkg.cmake) and select it.
+
+Press "Finish", wait until CMake configures the project then hit "Generate" to create the Visual Studio solution (library and unit test binary).
+
+2. Old Procedure (without vcpkg) :
 
 First of all, build libcurl using this fork of build-libcurl-windows : https://github.com/ribtoks/build-libcurl-windows
 
