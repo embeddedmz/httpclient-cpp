@@ -172,11 +172,6 @@ The unit test "TestDownloadFile" demonstrates how to use a progress function to 
 
 ## Thread Safety
 
-A mutex is used to increment/decrement atomically the count of CHTTPClient objects.
-
-`curl_global_init` is called when the count of CHTTPClient objects equals to zero (when instanciating the first object).
-`curl_global_cleanup` is called when the count of CHTTPClient objects become zero (when all CHTTPClient objects are destroyed).
-
 Do not share CHTTPClient objects across threads as this would mean accessing libcurl handles from multiple threads
 at the same time which is not allowed.
 
@@ -406,3 +401,9 @@ Try to preserve the existing coding style (Hungarian notation, indentation etc..
 If you compile the test program with the preprocessor macro DEBUG_CURL, to enable curl debug informations,
 the static library used must also be compiled with that macro. Don't forget to mention a path where to store
 log files in the INI file if you want to use that feature in the unit test program (curl_logs_folder under [local])
+
+### File names format when compiling with Visual Studio (Windows users)
+
+It is assumed that the FTP server is supporting UTF-8. You must feed the FTP client API with paths/file names encoded in UTF-8 and NOT in ANSI (Windows-1252 on Western/U.S. systems but iy can represent certain other Windows code pages on other systems, ANSI is just an extension for ASCII). Look at the unit tests for examples (look for the preprocessor macro WINDOWS to find them quickly).
+
+If you limit to ASCII characters, you don't need to convert your ANSI strings to UTF-8.
